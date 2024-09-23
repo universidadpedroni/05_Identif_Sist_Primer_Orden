@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <blink.h>
-
-
-
+#include <SoftwareSerial.h>
 /*
 Simple sistema de adquisición de datos para determinar la respuesta temporal de un sistema de primer orden.
 El sistema consiste en una resistencia en serie y un capacitor a masa. Un simple filtro RC.
@@ -27,7 +25,7 @@ El Arduino es usado solamente como generador de señal y adquisición de datos.
 Para comparar los datos con la FdT teórica:
 s=tf('s');
 R=100e3;
-C=47e-6;
+C=1e-6;
 G=1/(R*C*s+1);
 ts=4*R*C;
 [y,t]=step(G,1);
@@ -53,39 +51,32 @@ plot(t1,5 * y1)
 
 */
 
-//SoftwareSerial mySerial(10,11); // Rx,Tx
+SoftwareSerial mySerial(10,11); // Rx,Tx
 
 void Telemetria(unsigned long interval, float t, float y, float u);
 float PulsoEntrada(unsigned long interval, float u);
 
-#if defined ESP32
-  int pinEntrada = GPIO_NUM_5;
-  int pinSalida = GPIO_NUM_4;
-#else
-  int pinEntrada = A0;  // En vez de usar un  escalón, se usa un pulso de período largo. 
-  int pinSalida  = A3;  // Pin de lectura
-  int pinGND = A4;      // Pin usado como GND del circuito.
-#endif  
+int pinEntrada = A0;  // En vez de usar un  escalón, se usa un pulso de período largo. 
+int pinSalida  = A2;  // Pin de lectura
+int pinGND = A4;      // Pin usado como GND del circuito.
 
 blink parpadeo(LED_BUILTIN);
 
 void setup() {
-  
-  pinMode(pinEntrada,OUTPUT); //r(t)
+  delay(5000);
+  pinMode(pinEntrada,OUTPUT);
   digitalWrite(pinEntrada,LOW);
-#if !defined ESP32
   pinMode(pinGND,OUTPUT);
   digitalWrite(pinGND,LOW);
-#endif
   Serial.begin(115200);
-  //mySerial.begin(115200);
-  Serial.print('y');
-  Serial.print(',');
-  Serial.println('u');
+  mySerial.begin(115200);
+  mySerial.print('y');
+  mySerial.print(',');
+  mySerial.println('u');
   
   parpadeo.init();
   
- 
+  delay(1000);
 
 }
 
@@ -93,26 +84,21 @@ void loop()
 {
   static long millisInicial = millis();
   static float entrada = 0;  // Vin del sistema
-    
-    // Se actualiza el valor de entrada del sistema.
-  entrada != 0 ? digitalWrite(pinEntrada,HIGH): digitalWrite(pinEntrada, LOW);
-    
-    // Se adquiere la señal de salida del sistema.
-#if defined ESP32
-  float y = 3.3 * (float)analogRead(pinSalida) / 4095; // Vout
-#else
-  float y = 5.0 * (float)analogRead(pinSalida) / 1023; // Vout
-#endif  
-    // Se adquiere el instante de tiempo para el cual se toma la muestra de la señal
+  
+  // Se actualiza el valor de entrada del sistema.
+  entrada == 5 ? digitalWrite(pinEntrada,HIGH): digitalWrite(pinEntrada, LOW);
+  
+  // Se adquiere la señal de salida del sistema.
+  float y = 5 * (float)analogRead(pinSalida) / 1023; // Vout
+  
+  // Se adquiere el instante de tiempo para el cual se toma la muestra de la señal
   float t = (float) (millis() - millisInicial) / 1000;
-    
-    // Se envian los datos adquiridos por el puerto serie.
+  
+  // Se envian los datos adquiridos por el puerto serie.
   Telemetria(10, t, y, entrada);
 
-    // Se actualiza el valor de la entrada para formar el tren de pulsos.
-  entrada = PulsoEntrada(2000, entrada);
-    
- 
+  // Se actualiza el valor de la entrada para formar el tren de pulsos.
+  entrada = PulsoEntrada(1000, entrada);
   
   // La prueba de vida del Arduino.
   parpadeo.update(250);
@@ -129,11 +115,7 @@ float PulsoEntrada(unsigned long interval, float u)
 	if(currentMillis - previousMillis > interval) 
 	{
 		previousMillis = currentMillis;
-  #if defined ESP32
-    u == 0? u = 3.3 : u = 0;
-  #else
-    u == 0? u = 5.0 : u = 0;
-  #endif
+    u == 0? u = 5 : u = 0;
 		
 	}
   return u;
@@ -157,6 +139,12 @@ void Telemetria(unsigned long interval, float t, float y, float u)
     Serial.print("\t");
     Serial.print(u);
     Serial.println();
+		//mySerial.print(t);
+    //mySerial.print("\t");
+    mySerial.print(y);
+    mySerial.print("\t");
+    mySerial.print(u);
+    mySerial.println();
 	}
     
 }
